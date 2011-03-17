@@ -1,0 +1,50 @@
+<!doctype>
+<html>
+<head>
+  <script src="../socket.io.js"></script>
+  <link rel="stylesheet" href="qunit/qunit/qunit.css" type="text/css" media="screen" />
+  <script type="text/javascript" src="qunit/qunit/qunit.js"></script>
+</head>
+<body>
+  <h1 id="qunit-header">Socket.IO qUnit test suite</h1>
+  <div id="qunit-testrunner-toolbar"></div>
+  <h2 id="qunit-userAgent"></h2>
+  <ol id="qunit-tests"></ol>
+<script>
+(function(){
+var encode = io.Transport.prototype.encode
+  , decode = io.Transport.prototype.decode;
+  
+module("Message parsing");
+
+test("Decoding", function(){
+  // Decode a single message
+  var single = decode.call(this, '~m~5~m~abcde');
+  equals(single.length, 1, '1 message');
+  equals(single[0], 'abcde', 'expects abcde');
+  equals(typeof single[0], 'string', 'type should be a string');
+  
+  // Decode multiple messages
+  var multiple = decode.call(this, '~m~5~m~abcde' + '~m~9~m~123456789');
+  
+  equals(multiple.length, 2, '2 messages expected');
+  equals(multiple[0], 'abcde', 'expected abcde');
+  equals(multiple[1], '123456789', 'expected 123456789');
+  equals(typeof multiple[0], 'string', 'type should be a string');
+  equals(typeof multiple[1], 'string', 'type should be a string');
+  
+  // Decode a bad encoded message
+  var bad = decode.call(this, '~m~5~m~abcde' + '~mffsdaasdfd9~m~1aaa23456789');
+  
+  equals(bad.length, 1, '1 message is correctly encoded');
+  equals(bad[0], 'abcde');
+  equals(bad[1], undefined);
+});
+
+test("Encoding", function(){
+});
+
+})();
+</script>
+</body>
+</html>
