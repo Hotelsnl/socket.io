@@ -571,7 +571,7 @@ if (typeof window != 'undefined'){
     , document: document
     , port: document.location.port || 80
     , resource: 'socket.io'
-    , transports: ["websocket"]
+    , transports: ["websocket","flashsocket","htmlfile","xhr-multipart","xhr-polling","jsonp-polling"]
     , transportOptions: {
         'xhr-polling': {
           timeout: 25000 // based on polling duration default
@@ -1100,4 +1100,786 @@ if (typeof window != 'undefined'){
     return true;
   };
   
+})();
+/**
+ * socket.io-node-client
+ * Copyright(c) 2011 LearnBoost <dev@learnboost.com>
+ * MIT Licensed
+ */
+
+(function(){
+  var io = this.io,
+  
+  /**
+   * The Flashsocket transport. This is a API wrapper for the HTML5 WebSocket specification.
+   * It uses a .swf file to communicate with the server. If you want to serve the .swf file
+   * from a other server than where the Socket.IO script is coming from you need to use the
+   * insecure version of the .swf. More information about this can be found on the github page.
+   *
+   * @constructor
+   * @extends {io.Transport.websocket}
+   * @api public
+   */
+  Flashsocket = io.Transport.flashsocket = function(){
+    io.Transport.websocket.apply(this, arguments);
+  };
+  
+  io.util.inherit(Flashsocket, io.Transport.websocket);
+  
+  /**
+   * The transport type, you use this to identify which transport was chosen.
+   *
+   * @type {String}
+   * @api public
+   */
+  Flashsocket.prototype.type = 'flashsocket';
+  
+  /**
+   * Disconnect the established `Flashsocket` connection. This is done by adding a new
+   * task to the Flashsocket. The rest will be handled off by the `WebSocket` transport.
+   *
+   * @returns {Transport}
+   * @api public
+   */
+  Flashsocket.prototype.connect = function(){
+    var self = this, args = arguments;
+    WebSocket.__addTask(function(){
+      io.Transport.websocket.prototype.connect.apply(self, args);
+    });
+    return this;
+  };
+  
+  /**
+   * Sends a message to the Socket.IO server. This is done by adding a new
+   * task to the Flashsocket. The rest will be handled off by the `WebSocket` transport.
+   *
+   * @returns {Transport}
+   * @api public
+   */
+  Flashsocket.prototype.send = function(){
+    var self = this, args = arguments;
+    WebSocket.__addTask(function(){
+      io.Transport.websocket.prototype.send.apply(self, args);
+    });
+    return this;
+  };
+  
+  /**
+   * Check if the Flashsocket transport is supported as it requires that the Adobe Flash Player
+   * plugin version `10.0.0` or greater is installed. And also check if the polyfill is correctly
+   * loaded.
+   *
+   * @returns {Boolean}
+   * @api public
+   */
+  Flashsocket.check = function(){
+    if (typeof WebSocket == 'undefined' || !('__addTask' in WebSocket) || !swfobject) return false;
+    return swfobject.hasFlashPlayerVersion("10.0.0");
+  };
+  
+  /**
+   * Check if the Flashsocket transport can be used as cross domain / cross origin transport.
+   * Because we can't see which type (secure or insecure) of .swf is used we will just return true.
+   *
+   * @returns {Boolean}
+   * @api public
+   */
+  Flashsocket.xdomainCheck = function(){
+    return true;
+  };
+  
+})();/**
+ * socket.io-node-client
+ * Copyright(c) 2011 LearnBoost <dev@learnboost.com>
+ * MIT Licensed
+ */
+
+(function(){
+  var io = this.io,
+  
+  /**
+   * A small stub function that will be used to reduce memory leaks.
+   *
+   * @type {Function}
+   * @api private
+   */
+  empty = new Function,
+  
+  /**
+   * We preform a small feature detection to see if `Cross Origin Resource Sharing`
+   * is supported in the `XMLHttpRequest` object, so we can use it for cross domain requests.
+   *
+   * @type {Boolean}
+   * @api private
+   */ 
+  XMLHttpRequestCORS = (function(){
+    if (!('XMLHttpRequest' in window)) return false;
+    // CORS feature detection
+    var a = new XMLHttpRequest();
+    return a.withCredentials != undefined;
+  })(),
+  
+  /**
+   * Generates the correct `XMLHttpRequest` for regular and cross domain requests.
+   *
+   * @param {Boolean} [xdomain] Create a request that can be used cross domain.
+   * @returns {XMLHttpRequest|false} If we can create a XMLHttpRequest we will return that.
+   * @api private
+   */
+  request = function(xdomain){
+    if ('XDomainRequest' in window && xdomain) return new XDomainRequest();
+    if ('XMLHttpRequest' in window && (!xdomain || XMLHttpRequestCORS)) return new XMLHttpRequest();
+    if (!xdomain){
+      try {
+        var a = new ActiveXObject('MSXML2.XMLHTTP');
+        return a;
+      } catch(e){}
+    
+      try {
+        var b = new ActiveXObject('Microsoft.XMLHTTP');
+        return b;
+      } catch(e){}
+    }
+    return false;
+  },
+  
+  /**
+   * This is the base for XHR based transports, the `XHR-Polling` and the `XHR-multipart` 
+   * transports will extend this class.
+   *
+   * @constructor
+   * @extends {io.Transport}
+   * @property {Array} sendBuffer Used to queue up messages so they can be send as one request.
+   * @api public
+   */
+  XHR = io.Transport.XHR = function(){
+    io.Transport.apply(this, arguments);
+    this.sendBuffer = [];
+  };
+  
+  io.util.inherit(XHR, io.Transport);
+  
+  /**
+   * Establish a connection
+   *
+   * @returns {Transport}
+   * @api public
+   */
+  XHR.prototype.connect = function(){
+    this.get();
+    return this;
+  };
+  
+  /**
+   * Check if we need to send data to the Socket.IO server, if we have data in our buffer
+   * we encode it and forward it to the sendIORequest method.
+   *
+   * @api private
+   */
+  XHR.prototype.checkSend = function(){
+    if (!this.posting && this.sendBuffer.length){
+      var encoded = this.encode(this.sendBuffer);
+      this.sendBuffer = [];
+      this.sendIORequest(encoded);
+    }
+  };
+  
+  /**
+   * Send data to the Socket.IO server.
+   *
+   * @param data The message
+   * @returns {Transport}
+   * @api public
+   */
+  XHR.prototype.send = function(data){
+    if (io.util.isArray(data)){
+      this.sendBuffer.push.apply(this.sendBuffer, data);
+    } else {
+      this.sendBuffer.push(data);
+    }
+    this.checkSend();
+    return this;
+  };
+  
+  /**
+   * Posts a encoded message to the Socket.IO server.
+   *
+   * @param {String} data A encoded message.
+   * @api private
+   */
+  XHR.prototype.sendIORequest = function(data){
+    var self = this;
+    this.posting = true;
+    this.sendXHR = this.request('send', 'POST');
+    this.sendXHR.onreadystatechange = function(){
+      var status;
+      if (self.sendXHR.readyState == 4){
+        self.sendXHR.onreadystatechange = empty;
+        try { status = self.sendXHR.status; } catch(e){}
+        self.posting = false;
+        if (status == 200){
+          self.checkSend();
+        } else {
+          self.onDisconnect();
+        }
+      }
+    };
+    this.sendXHR.send('data=' + encodeURIComponent(data));
+  };
+  
+  /**
+   * Disconnect the established connection.
+   *
+   * @returns {Transport}.
+   * @api public
+   */
+  XHR.prototype.disconnect = function(){
+    // send disconnection signal
+    this.onDisconnect();
+    return this;
+  };
+  
+  /**
+   * Handle the disconnect request.
+   *
+   * @api private
+   */
+  XHR.prototype.onDisconnect = function(){
+    if (this.xhr){
+      this.xhr.onreadystatechange = empty;
+      try {
+        this.xhr.abort();
+      } catch(e){}
+      this.xhr = null;
+    }
+    if (this.sendXHR){
+      this.sendXHR.onreadystatechange = empty;
+      try {
+        this.sendXHR.abort();
+      } catch(e){}
+      this.sendXHR = null;
+    }
+    this.sendBuffer = [];
+    io.Transport.prototype.onDisconnect.call(this);
+  };
+  
+  /**
+   * Generates a configured XHR request
+   *
+   * @param {String} url The url that needs to be requested.
+   * @param {String} method The method the request should use.
+   * @param {Boolean} multipart Do a multipart XHR request
+   * @returns {XMLHttpRequest}
+   * @api private
+   */
+  XHR.prototype.request = function(url, method, multipart){
+    var req = request(this.base.isXDomain());
+    if (multipart) req.multipart = true;
+    req.open(method || 'GET', this.prepareUrl() + (url ? '/' + url : ''));
+    if (method == 'POST' && 'setRequestHeader' in req){
+      req.setRequestHeader('Content-type', 'application/x-www-form-urlencoded; charset=utf-8');
+    }
+    return req;
+  };
+  
+  /**
+   * Check if the XHR transports are supported
+   *
+   * @param {Boolean} xdomain Check if we support cross domain requests.
+   * @returns {Boolean}
+   * @api public
+   */
+  XHR.check = function(xdomain){
+    try {
+      if (request(xdomain)) return true;
+    } catch(e){}
+    return false;
+  };
+  
+  /**
+   * Check if the XHR transport supports corss domain requests.
+   * 
+   * @returns {Boolean}
+   * @api public
+   */
+  XHR.xdomainCheck = function(){
+    return XHR.check(true);
+  };
+  
+  XHR.request = request;
+  
+})();
+/**
+ * socket.io-node-client
+ * Copyright(c) 2011 LearnBoost <dev@learnboost.com>
+ * MIT Licensed
+ */
+
+(function(){
+  var io = this.io,
+  
+  /**
+   * The HTMLFile transport creates a `forever iframe` based transport
+   * for Internet Explorer. Regular forever iframe implementations will 
+   * continuously trigger the browsers buzy indicators. If the forever iframe
+   * is created inside a `htmlfile` these indicators will not be trigged.
+   *
+   * @constructor
+   * @extends {io.Transport.XHR}
+   * @api public
+   */
+  HTMLFile = io.Transport.htmlfile = function(){
+    io.Transport.XHR.apply(this, arguments);
+  };
+  
+  io.util.inherit(HTMLFile, io.Transport.XHR);
+  
+  /**
+   * The transport type, you use this to identify which transport was chosen.
+   *
+   * @type {String}
+   * @api public
+   */
+  HTMLFile.prototype.type = 'htmlfile';
+  
+  /**
+   * Starts the HTMLFile data stream for incoming messages. And registers a
+   * onunload event listener so the HTMLFile will be destroyed.
+   *
+   * @api private
+   */
+  HTMLFile.prototype.get = function(){
+    var self = this;
+    this.open();
+    window.attachEvent('onunload', function(){ self.destroy(); });
+  };
+  
+  /**
+   * Creates a new ActiveX `htmlfile` with a forever loading iframe
+   * that can be used to listen to messages. Inside the generated
+   * `htmlfile` a reference will be made to the HTMLFile transport.
+   *
+   * @api private
+   */
+  HTMLFile.prototype.open = function(){
+    this.doc = new ActiveXObject('htmlfile');
+    this.doc.open();
+    this.doc.write('<html></html>');
+    this.doc.parentWindow.s = this;
+    this.doc.close();
+    
+    var iframeC = this.doc.createElement('div');
+    this.doc.body.appendChild(iframeC);
+    this.iframe = this.doc.createElement('iframe');
+    iframeC.appendChild(this.iframe);
+    this.iframe.src = this.prepareUrl() + '/' + (+ new Date);
+  };
+  
+  /**
+   * The Socket.IO server will write script tags inside the forever
+   * iframe, this function will be used as callback for the incoming
+   * information.
+   *
+   * @param {String} data The message
+   * @param {document} doc Reference to the context
+   * @api private
+   */
+  HTMLFile.prototype._ = function(data, doc){
+    this.onData(data);
+    var script = doc.getElementsByTagName('script')[0];
+    script.parentNode.removeChild(script);
+  };
+  
+  /**
+   * Destroy the established connection, iframe and `htmlfile`.
+   * And calls the `CollectGarbage` function of Internet Explorer
+   * to release the memory.
+   *
+   * @api private
+   */
+  HTMLFile.prototype.destroy = function(){
+    if (this.iframe){
+      try {
+        this.iframe.src = 'about:blank';
+      } catch(e){}
+      this.doc = null;
+      CollectGarbage();
+    }
+  };
+  
+  /**
+   * Disconnects the established connection.
+   *
+   * @returns {Transport} Chaining.
+   * @api public
+   */
+  HTMLFile.prototype.disconnect = function(){
+    this.destroy();
+    return io.Transport.XHR.prototype.disconnect.call(this);
+  };
+  
+  /**
+   * Checks if the browser supports this transport. The browser
+   * must have an `ActiveXObject` implementation.
+   *
+   * @return {Boolean}
+   * @api public
+   */
+  HTMLFile.check = function(){
+    if ('ActiveXObject' in window){
+      try {
+        var a = new ActiveXObject('htmlfile');
+        return a && io.Transport.XHR.check();
+      } catch(e){}
+    }
+    return false;
+  };
+  
+  /**
+   * Check if cross domain requests are supported.
+   *
+   * @returns {Boolean}
+   * @api public
+   */
+  HTMLFile.xdomainCheck = function(){
+    // we can probably do handling for sub-domains, we should test that it's cross domain but a subdomain here
+    return false;
+  };
+  
+})();/**
+ * socket.io-node-client
+ * Copyright(c) 2011 LearnBoost <dev@learnboost.com>
+ * MIT Licensed
+ */
+
+(function(){
+  var io = this.io,
+  
+  /**
+   * The XHR-Multipart transport uses the a multipart XHR connection to
+   * stream in the data from the Socket.IO server
+   *
+   * @constructor
+   * @extends {io.Transport.XHR}
+   * @api public
+   */
+  XHRMultipart = io.Transport['xhr-multipart'] = function(){
+    io.Transport.XHR.apply(this, arguments);
+  };
+  
+  io.util.inherit(XHRMultipart, io.Transport.XHR);
+  
+   /**
+   * The transport type, you use this to identify which transport was chosen.
+   *
+   * @type {String}
+   * @api public
+   */
+  XHRMultipart.prototype.type = 'xhr-multipart';
+  
+  /**
+   * Starts the multipart stream for incomming messages.
+   *
+   * @api private
+   */
+  XHRMultipart.prototype.get = function(){
+    var self = this;
+    this.xhr = this.request('', 'GET', true);
+    this.xhr.onreadystatechange = function(){
+      if (self.xhr.readyState == 4) self.onData(self.xhr.responseText);
+    };
+    this.xhr.send(null);
+  };
+  
+  /**
+   * Checks if browser supports this transport.
+   *
+   * @return {Boolean}
+   * @api public
+   */
+  XHRMultipart.check = function(){
+    return 'XMLHttpRequest' in window && 'prototype' in XMLHttpRequest && 'multipart' in XMLHttpRequest.prototype;
+  };
+  
+  /**
+   * Check if cross domain requests are supported.
+   *
+   * @returns {Boolean}
+   * @api public
+   */
+  XHRMultipart.xdomainCheck = function(){
+    return true;
+  };
+  
+})();/**
+ * socket.io-node-client
+ * Copyright(c) 2011 LearnBoost <dev@learnboost.com>
+ * MIT Licensed
+ */
+
+(function(){
+  var io = this.io,
+  
+  /**
+   * A small stub function that will be used to reduce memory leaks.
+   *
+   * @type {Function}
+   * @api private
+   */
+  empty = new Function(),
+  
+  /**
+   * The XHR-polling transport uses long polling XHR requests to create a
+   * "persistent" connection with the server.
+   *
+   * @constructor
+   * @extends {io.Transport.XHR}
+   * @api public
+   */
+  XHRPolling = io.Transport['xhr-polling'] = function(){
+    io.Transport.XHR.apply(this, arguments);
+  };
+  
+  io.util.inherit(XHRPolling, io.Transport.XHR);
+  
+  /**
+   * The transport type, you use this to identify which transport was chosen.
+   *
+   * @type {string}
+   * @api public
+   */
+  XHRPolling.prototype.type = 'xhr-polling';
+  
+  /** 
+   * Establish a connection, for iPhone and Android this will be done once the page
+   * is loaded.
+   *
+   * @returns {Transport} Chaining.
+   * @api public
+   */
+  XHRPolling.prototype.connect = function(){
+    var self = this;
+    io.util.defer(function(){ io.Transport.XHR.prototype.connect.call(self) });
+    return false;
+  };
+  
+   /**
+   * Starts a XHR request to wait for incoming messages.
+   *
+   * @api private
+   */
+  XHRPolling.prototype.get = function(){
+    var self = this;
+    this.xhr = this.request(+ new Date, 'GET');
+    this.xhr.onreadystatechange = function(){
+      var status;
+      if (self.xhr.readyState == 4){
+        self.xhr.onreadystatechange = empty;
+        try { status = self.xhr.status; } catch(e){}
+        if (status == 200){
+          self.onData(self.xhr.responseText);
+          self.get();
+        } else {
+          self.onDisconnect();
+        }
+      }
+    };
+    this.xhr.send(null);
+  };
+  
+  /**
+   * Checks if browser supports this transport.
+   *
+   * @return {Boolean}
+   * @api public
+   */
+  XHRPolling.check = function(){
+    return io.Transport.XHR.check();
+  };
+  
+  /**
+   * Check if cross domain requests are supported
+   *
+   * @returns {Boolean}
+   * @api public
+   */
+  XHRPolling.xdomainCheck = function(){
+    return io.Transport.XHR.xdomainCheck();
+  };
+
+})();
+/**
+ * socket.io-node-client
+ * Copyright(c) 2011 LearnBoost <dev@learnboost.com>
+ * MIT Licensed
+ */
+
+(function(){
+  var io = this.io,
+  
+  /**
+   * The JSONP transport creates an persistent connection by dynamically
+   * inserting a script tag in the page. This script tag will receive the
+   * information of the Socket.IO server. When new information is received
+   * it creates a new script tag for the new data stream.
+   *
+   * @constructor
+   * @extends {io.Transport.xhr-polling}
+   * @api public
+   */
+  JSONPPolling = io.Transport['jsonp-polling'] = function(){
+    io.Transport.XHR.apply(this, arguments);
+    this.insertAt = document.getElementsByTagName('script')[0];
+    this.index = io.JSONP.length;
+    io.JSONP.push(this);
+  };
+  
+  io.util.inherit(JSONPPolling, io.Transport['xhr-polling']);
+  
+  /**
+   * A list of all JSONPolling transports, this is used for by
+   * the Socket.IO server to distribute the callbacks.
+   *
+   * @type {Array}
+   * @api private
+   */
+  io.JSONP = [];
+  
+  /**
+   * The transport type, you use this to identify which transport was chosen.
+   *
+   * @type {String}
+   * @api public
+   */
+  JSONPPolling.prototype.type = 'jsonp-polling';
+  
+  /**
+   * Posts a encoded message to the Socket.IO server using an iframe.
+   * The iframe is used because script tags can create POST based requests.
+   * The iframe is positioned outside of the view so the user does not
+   * notice it's existence.
+   *
+   * @param {String} data A encoded message.
+   * @api private
+   */
+  JSONPPolling.prototype.sendIORequest = function(data){
+    var self = this;
+    if (!('form' in this)){
+      var form = document.createElement('FORM'),
+        area = document.createElement('TEXTAREA'),
+        id = this.iframeId = 'socket_io_iframe_' + this.index,
+        iframe;
+  
+      form.style.position = 'absolute';
+      form.style.top = '-1000px';
+      form.style.left = '-1000px';
+      form.target = id;
+      form.method = 'POST';
+      form.action = this.prepareUrl() + '/' + (+new Date) + '/' + this.index;
+      area.name = 'data';
+      form.appendChild(area);
+      this.insertAt.parentNode.insertBefore(form, this.insertAt);
+      document.body.appendChild(form);
+  
+      this.form = form;
+      this.area = area;
+    }
+  
+    function complete(){
+      initIframe();
+      self.posting = false;
+      self.checkSend();
+    };
+  
+    function initIframe(){
+      if (self.iframe){
+        self.form.removeChild(self.iframe);
+      }
+  
+      try {
+        // ie6 dynamic iframes with target="" support (thanks Chris Lambacher)
+        iframe = document.createElement('<iframe name="'+ self.iframeId +'">');
+      } catch(e){
+        iframe = document.createElement('iframe');
+        iframe.name = self.iframeId;
+      }
+  
+      iframe.id = self.iframeId;
+  
+      self.form.appendChild(iframe);
+      self.iframe = iframe;
+    };
+  
+    initIframe();
+  
+    this.posting = true;
+    this.area.value = data;
+  
+    try {
+      this.form.submit();
+    } catch(e){}
+  
+    if (this.iframe.attachEvent){
+      iframe.onreadystatechange = function(){
+        if (self.iframe.readyState == 'complete') complete();
+      };
+    } else {
+      this.iframe.onload = complete;
+    }
+  };
+  
+  /**
+   * Creates a new JSONP poll that can be used to listen
+   * for messages from the Socket.IO server.
+   *
+   * @api private
+   */
+  JSONPPolling.prototype.get = function(){
+    var self = this,
+        script = document.createElement('SCRIPT');
+    if (this.script){
+      this.script.parentNode.removeChild(this.script);
+      this.script = null;
+    }
+    script.async = true;
+    script.src = this.prepareUrl() + '/' + (+new Date) + '/' + this.index;
+    script.onerror = function(){
+      self.onDisconnect();
+    };
+    this.insertAt.parentNode.insertBefore(script, this.insertAt);
+    this.script = script;
+  };
+  
+  /**
+   * Callback function for the incoming message stream from the Socket.IO server.
+   *
+   * @param {String} data The message
+   * @param {document} doc Reference to the context
+   * @api private
+   */
+  JSONPPolling.prototype._ = function(){
+    this.onData.apply(this, arguments);
+    this.get();
+    return this;
+  };
+  
+  /**
+   * Checks if browser supports this transport.
+   *
+   * @return {Boolean}
+   * @api public
+   */
+  JSONPPolling.check = function(){
+    return true;
+  };
+  
+  /**
+   * Check if cross domain requests are supported
+   *
+   * @returns {Boolean}
+   * @api public
+   */
+  JSONPPolling.xdomainCheck = function(){
+    return true;
+  };
 })();
