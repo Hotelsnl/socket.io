@@ -34,7 +34,7 @@ module.exports = {
       var lines = result.split('\n');
       lines.length.should.be.below(5);
       lines[0].should.match(/production/gi);
-      Buffer.byteLength(result).should.be.below(25000);
+      Buffer.byteLength(result).should.be.below(35000);
     });
   }
 , 'development build LOC': function(){
@@ -44,7 +44,7 @@ module.exports = {
       var lines = result.split('\n');
       lines.length.should.be.above(5);
       lines[0].should.match(/development/gi);
-      Buffer.byteLength(result).should.be.above(25000);
+      Buffer.byteLength(result).should.be.above(35000);
     });
   }
 , 'default builds': function(){
@@ -72,5 +72,29 @@ module.exports = {
       transports.length.should.be.equal(1);
       transports[0].should.be.equal('websocket');
     });
+  }
+, 'globals': function(){
+    builder(function(error, result){
+      var io = common.execute(result)
+        , env = common.env()
+        , globals = 0;
+      
+      // allowed globals
+      var allowed = ['io', 'swfobject', 'WEB_SOCKET_SWF_LOCATION'];
+      Array.prototype.push.apply(allowed, Object.keys(env));
+      
+      Object.keys(io).forEach(function(global){
+        var index = allowed.indexOf(global);
+        
+        // the global is not allowed!
+        if(!~index){
+          console.log(global);
+          globals++;
+        }
+      });
+      
+      // don't polute the globals
+      globals.should.be.equal(0);
+    })
   }
 }

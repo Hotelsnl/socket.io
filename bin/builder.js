@@ -50,7 +50,12 @@ var base = [
  
  var baseTransports = {
     'websocket': ['transports/websocket.js']
-  , 'flashsocket': ['transports/websocket.js', 'transports/flashsocket.js']
+  , 'flashsocket': [
+      'transports/websocket.js'
+    , 'vendor/web-socket-js/swfobject.js'
+    , 'vendor/web-socket-js/web_socket.js'
+    , 'transports/flashsocket.js'
+    ]
   , 'htmlfile': ['transports/xhr.js', 'transports/htmlfile.js']
   , 'xhr-multipart': ['transports/xhr.js', 'transports/xhr-multipart.js']
   , 'xhr-polling': ['transports/xhr.js', 'transports/xhr-polling.js']
