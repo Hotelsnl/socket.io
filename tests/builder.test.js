@@ -1,0 +1,76 @@
+/*!
+ * socket.io-node
+ * Copyright(c) 2011 LearnBoost <dev@learnboost.com>
+ * MIT Licensed
+ */
+ 
+var builder = require('../bin/builder')
+  , common = require('./common')
+  , assert = require('assert')
+
+module.exports = {
+  'version number': function(){
+    builder.version.should.match(/([0-9]+)\.([0-9]+)\.([0-9]+)/);
+    builder.version.should.equal(require('../lib/io').io.version);
+  }
+, 'transports replacement production build': function(){
+    builder(function(error, result){
+      assert.ok(!error);
+      
+      result.indexOf("'@@AVAILABLE-TRANSPORTS@@'").should.equal(-1);
+    })
+  }
+, 'transports replacement development build': function(){
+    builder({minify:false}, function(error, result){
+      assert.ok(!error);
+      
+      result.indexOf("'@@AVAILABLE-TRANSPORTS@@'").should.equal(-1);
+    })
+  }
+, 'production build LOC': function(){
+    builder(function(error, result){
+      assert.ok(!error)
+      
+      var lines = result.split('\n');
+      lines.length.should.be.below(5);
+      lines[0].should.match(/production/gi);
+      Buffer.byteLength(result).should.be.below(25000);
+    });
+  }
+, 'development build LOC': function(){
+    builder({minify:false}, function(error, result){
+      assert.ok(!error)
+      
+      var lines = result.split('\n');
+      lines.length.should.be.above(5);
+      lines[0].should.match(/development/gi);
+      Buffer.byteLength(result).should.be.above(25000);
+    });
+  }
+, 'default builds': function(){
+    builder(function(error, result){
+      assert.ok(!error);
+      
+      var io = common.execute(result).io;
+      
+      var transports = Object.keys(io.Transport)
+        , defaults = Object.keys(builder.transports);
+      
+      transports.length.should.be.equal(defaults.length + 1 /* XHR transport is private, but still available */);
+      defaults.forEach(function(transport){
+        transports.indexOf(transport).should.be.above(-1);
+      })
+    });
+  }
+, 'custom build': function(){
+    builder(['websocket'], function(error, result){
+      assert.ok(!error);
+      
+      var io = common.execute(result).io;
+      
+      var transports = Object.keys(io.Transport);
+      transports.length.should.be.equal(1);
+      transports[0].should.be.equal('websocket');
+    });
+  }
+}
