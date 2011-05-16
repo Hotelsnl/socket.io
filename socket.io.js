@@ -928,7 +928,7 @@ var io = this.io = {
             reset();
           }
         } else {
-          self.reconnectionDelay *= 2; // exponential back off
+          self.reconnectionDelay = self.reconnectionDelay < self.options.maxReconnectionDuration ? self.reconnectionDelay * 2 : self.options.maxReconnectionDuration; // exponential back off
           self.connect();
           self.emit('reconnecting', [self.reconnectionDelay,self.reconnectionAttempts]);
           self.reconnectionTimer = setTimeout(maybeReconnect, self.reconnectionDelay);
