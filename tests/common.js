@@ -14,7 +14,16 @@ var vm = require('vm')
  
 exports.env = function env(){
   var details = {
-    location:{},
+    location:{
+      port: 8080
+    , host: 'www.example.org'
+    , hostname: 'www.example.org'
+    , href: 'http://www.example.org/example/'
+    , pathname: '/example/'
+    , protocol: 'http:'
+    , search: ''
+    , hash: ''
+    },
     console: {
       log:   function(){},
       info:  function(){},
@@ -49,7 +58,7 @@ exports.env = function env(){
     }
   };
   // circular references
-  details.window = details.self = details.contentWindow = details.document = details;
+  details.window = details.self = details.contentWindow = details;
   
   // callable methods
   details.Image = details.scrollTo = details.scrollBy = details.scroll = details.resizeTo =
@@ -59,7 +68,12 @@ exports.env = function env(){
   details.XMLHttpRequest = details.getComputedStyle = details.trigger = details.dispatchEvent =
   details.removeEventListener = details.addEventListener = function(){};
   
-  details.frames = [details]
+  // frames
+  details.frames = [details];
+  
+  // document
+  details.document = details;
+  details.document.domain = details.location.href;
   return details;
 };
 

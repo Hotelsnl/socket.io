@@ -6,7 +6,7 @@
  
 var builder = require('../bin/builder')
   , common = require('./common')
-  , assert = require('assert')
+  , assert = require('assert');
 
 module.exports = {
   'version number': function(){
