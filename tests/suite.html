@@ -1,0 +1,214 @@
+<!doctype>
+<html>
+<head>
+  <script src="../socket.io.js"></script>
+  <link rel="stylesheet" href="qunit/qunit/qunit.css" type="text/css" media="screen" />
+  <script type="text/javascript" src="qunit/qunit/qunit.js"></script>
+</head>
+<body>
+  <h1 id="qunit-header">Socket.IO qUnit test suite</h1>
+  <div id="qunit-testrunner-toolbar"></div>
+  <h2 id="qunit-userAgent"></h2>
+  <ol id="qunit-tests"></ol>
+<script>
+(function(){
+var encode = io.Transport.prototype.encode
+  , decode = io.Transport.prototype.decode;
+
+/** 
+ * Message parsing
+ */  
+module('Message parsing');
+
+/**
+ * Test the decoding of messages from the Socket.IO server
+ */
+test('decoding', function(){
+  // Decode a single message
+  var single = decode.call(this, '~m~5~m~abcde');
+  equals(single.length, 1);
+  equals(single[0], 'abcde');
+  equals(typeof single[0], 'string');
+  
+  // Decode multiple messages
+  var multiple = decode.call(this, '~m~5~m~abcde' + '~m~9~m~123456789');
+  
+  equals(multiple.length, 2);
+  equals(multiple[0], 'abcde');
+  equals(multiple[1], '123456789');
+  equals(typeof multiple[0], 'string');
+  equals(typeof multiple[1], 'string');
+  
+  // Decode a bad encoded message
+  var bad = decode.call(this, '~m~5~m~abcde' + '~mffsdaasdfd9~m~1aaa23456789');
+  
+  equals(bad.length, 1);
+  equals(bad[0], 'abcde');
+  equals(bad[1], undefined);
+});
+
+/**
+ * Test the encoding of messages for the Socket.IO server
+ */
+test('encoding', function(){
+  equals(encode.call(this, ['abcde', '123456789']), '~m~5~m~abcde' + '~m~9~m~123456789');
+  equals(encode.call(this, 'asdasdsad'), '~m~9~m~asdasdsad');
+  equals(encode.call(this, {foo:'bar',bar:123,baz:[]}), '~m~35~m~~j~{"foo":"bar","bar":123,"baz":[]}')
+  equals(encode.call(this, ''), '~m~0~m~');
+  equals(encode.call(this, null), '~m~0~m~');
+  
+  // check function converstion..
+  var fn = function(){console.log('pewpew')}
+    , str = fn.toString();
+    
+  equals(encode.call(this, fn), '~m~' + str.length + '~m~' + str);
+});
+
+/**
+ * Content interception, handle the ~j~ and ~h~ flags
+ */
+test('content interception', function(){
+  
+  // We need to create a little stub to see if the onMessage dispatches the content correctly based
+  // on the content of the messages.
+  var stub = {
+      // transports assume if there's no session id, the first message from the server is the sessionid
+      sessionid:1
+      
+      // support heatbeart echos
+    , onHeartbeat:function(beat){
+        equals(beat, '1000');
+      }
+      
+      // regular messages as dispatched to the base.onMessage function
+    , base: {
+        onMessage:function(obj){
+          equals(obj.foo, 'bar');
+          equals(obj.bar, 123);
+          equals(Object.prototype.toString.call(obj.baz), '[object Array]');
+          equals(obj.baz.length, 0);
+        }
+    }
+  };
+  
+  io.Transport.prototype.onMessage.call(stub, '~h~1000');
+  io.Transport.prototype.onMessage.call(stub, '~j~{"foo":"bar","bar":123,"baz":[]}');
+  
+  // overwrite the stub, and handle a regular message
+  stub.base.onMessage = function(msg){ equals(msg,'pewpew'); };
+  io.Transport.prototype.onMessage.call(stub, 'pewpew');
+  
+  // even if the message looks like json, it's not prefixed with ~j~, so it should be a string
+  stub.base.onMessage = function(msg){ equals(msg,'{"foo":"bar","bar":123,"baz":[]}'); };
+  io.Transport.prototype.onMessage.call(stub, '{"foo":"bar","bar":123,"baz":[]}');
+});
+
+/**
+ * Util handling
+ */
+module('io.util');
+
+/**
+ * Array detection
+ */
+test('isArray', function(){
+  ok(io.util.isArray([]));
+  ok(!io.util.isArray({}));
+  ok(!io.util.isArray('str'));
+  ok(!io.util.isArray(new Date()));
+  ok(!io.util.isArray(arguments));
+});
+
+/**
+ * Merge two objects
+ */
+test('merge', function(){
+  var start = {foo:'bar', bar: 'baz' }
+  ,   duplicate = {foo:'foo', bar:'bar' }
+  ,   extra = {ping:'pong'};
+  
+  io.util.merge(start,duplicate);
+  equal(start.foo, 'foo');
+  equal(start.bar, 'bar');
+  
+  io.util.merge(start,extra);
+  equal(start.ping, 'pong');
+  equal(start.foo, 'foo');
+});
+
+/**
+ * Defer should take 100ms after the onload for webkit browsers.
+ * All other browser should fire at inmeditly.
+ */
+test('defer', function(){
+  stop(1000);
+  var now = +new Date();
+  io.util.defer(function(){
+    ok(+new Date() - now >= ( io.util.webkit ? 100 : 0 ) );
+    start();
+  })
+});
+
+/**
+ * Return the index of a item for given array
+ */
+test('indexOf', function(){
+  var data = ['socket',2,3,4,'socket',5,6,7,'io'];
+  equal(io.util.indexOf(data,'socket',1),4);
+  equal(io.util.indexOf(data,'socket',0),0);
+});
+
+/**
+ * io
+ */
+module('io');
+
+/**
+ * Set the path to the swf socket
+ * @deprecated Use WEB_SOCKET_SWF_LOCATION instead
+ */
+test('setPath', function(){
+  var defaultPath = WEB_SOCKET_SWF_LOCATION;
+  
+  io.setPath('/test/');
+  equal(WEB_SOCKET_SWF_LOCATION, '/test/' + 'lib/vendor/web-socket-js/WebSocketMain.swf');
+  WEB_SOCKET_SWF_LOCATION = defaultPath; // restore for the rest of the suite
+});
+
+/**
+ * Library version number should always be available
+ */
+test('version', function(){
+  ok(!!io.version);
+});
+
+/**
+ * Constructing
+ */
+module('constructing');
+
+/**
+ * Handle a "basic" construction
+ */
+test('defaults', function(){
+  var socket = new io.Socket();
+  equal(socket.host, document.domain);
+  equal(socket.connected, false);
+  equal(socket.connecting, false);
+  ok(!!socket.transport);
+  
+  // options are correctly applied
+  socket = new io.Socket(null,{
+    port:8080,
+    transports:['jsonp-polling']
+  });
+  
+  equal(socket.options.port, 8080);
+  ok(!!socket.transport);
+  equal(socket.transport.type, 'jsonp-polling');
+});
+
+})();
+</script>
+</body>
+</html>

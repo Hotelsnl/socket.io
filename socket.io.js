@@ -602,7 +602,9 @@ var io = this.io = {
       match = this.options.document.cookie.match('(?:^|;)\\s*socketio=([^;]*)');
       if (match){
         this.rememberedTransport = true;
-        transports = [decodeURIComponent(match[1])];
+        match = decodeURIComponent(match[1]);
+        // Sort the transports to put the remembered transport first.
+        transports = transports.sort(function(a,b){ return b === match ? 1 : -1})
       }
     } 
     for (var i = 0, transport; transport = transports[i]; i++){
@@ -928,7 +930,7 @@ var io = this.io = {
             reset();
           }
         } else {
-          self.reconnectionDelay = self.reconnectionDelay < self.options.maxReconnectionDuration ? self.reconnectionDelay * 2 : self.options.maxReconnectionDuration; // exponential back off
+          self.reconnectionDelay *= 2; // exponential back off
           self.connect();
           self.emit('reconnecting', [self.reconnectionDelay,self.reconnectionAttempts]);
           self.reconnectionTimer = setTimeout(maybeReconnect, self.reconnectionDelay);
@@ -1990,7 +1992,7 @@ var swfobject=function(){var D="undefined",r="object",S="Shockwave Flash",W="Sho
   XHRPolling.prototype.connect = function(){
     var self = this;
     io.util.defer(function(){ io.Transport.XHR.prototype.connect.call(self) });
-    return false;
+    return this;
   };
   
    /**
