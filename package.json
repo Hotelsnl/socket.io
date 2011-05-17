@@ -14,5 +14,5 @@
   } ]
 , "engines": { "node": "*" }
 , "scripts" :
-  { "install" : "bin/build" }
+  { "install" : "bin/builder" }
 }

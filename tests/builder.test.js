@@ -80,7 +80,7 @@ module.exports = {
         , globals = 0;
       
       // allowed globals
-      var allowed = ['io', 'swfobject', 'WEB_SOCKET_SWF_LOCATION'];
+      var allowed = ['io', 'swfobject', 'WEB_SOCKET_SWF_LOCATION', 'WEB_SOCKET_DISABLE_AUTO_INITIALIZATION'];
       Array.prototype.push.apply(allowed, Object.keys(env));
       
       Object.keys(io).forEach(function(global){
