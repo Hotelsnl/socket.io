@@ -48,7 +48,7 @@ var io = this.io = {
      * @api public
      */
     load: function(fn){
-      if (/loaded|complete/.test(document.readyState) || pageLoaded) return fn();
+      if (document.readyState === 'complete' || pageLoaded) return fn();
       if ('attachEvent' in window){
         window.attachEvent('onload', fn);
       } else {
@@ -154,10 +154,23 @@ var io = this.io = {
      * @param {Object} additional The object that supplies the keys
      * @api public
      */
-    merge: function(target, additional){
-      for (var i in additional)
-        if (additional.hasOwnProperty(i))
-          target[i] = additional[i];
+    merge: function merge(target, additional, deep, lastseen){
+			var seen = lastseen || []
+				, depth = typeof deep == 'undefined' ? 2 : deep
+				, prop;
+			
+			for (prop in additional){
+				if (additional.hasOwnProperty(prop) && this.indexOf(seen, prop) < 0){
+					if (typeof target[prop] !== 'object' || !depth){
+						target[prop] = additional[prop];
+						seen.push(additional[prop]);
+					} else {
+						this.merge(target[prop], additional[prop], depth - 1, seen);
+					}
+				}
+			}
+      
+      return target;
     }
   };
   
@@ -562,7 +575,7 @@ var io = this.io = {
     // check if we need to parse down fragments
     if (fragments && fragments.length){
       if (+fragments[fragments.length -1]){
-        this.options.port =  fragments.pop();
+        this.options.port = fragments.pop();
       }
       if (fragments[0]){
         this.options.secure = fragments[0] === 'https';

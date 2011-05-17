@@ -25,9 +25,42 @@
 	
 	// merge multiple objects
 	test('merge', function(){
-	  var start = {foo:'bar', bar: 'baz' }
-	  ,   duplicate = {foo:'foo', bar:'bar' }
-	  ,   extra = {ping:'pong'};
+	  var start = {
+	  			foo: 'bar'
+	  		, bar: 'baz'
+	  		}
+	  	, duplicate = {
+	  			foo: 'foo'
+	  		, bar: 'bar'
+	  		}
+	  	, extra = {
+	  			ping: 'pong'
+	  		}
+	  	, deep = {
+	  			level1:{
+	  				foo: 'bar'
+	  			, level2: {
+	  					foo: 'bar'
+	  				,	level3:{
+	  						foo: 'bar'
+	  					, rescursive: deep
+	  					}
+	  				}
+	  			}
+	  		}
+	  	, deeper = {
+	  			foo: 'bar'
+	  		, level1:{
+	  				foo: 'baz'
+	  			, level2: {
+	  					foo: 'foo'
+	  				,	level3:{
+	  						foo: 'pewpew'
+	  					, rescursive: deep
+	  					}
+	  				}
+	  			}
+	  		};
 	  
 	  io.util.merge(start,duplicate);
 	  equal(start.foo, 'foo');
@@ -36,6 +69,12 @@
 	  io.util.merge(start,extra);
 	  equal(start.ping, 'pong');
 	  equal(start.foo, 'foo');
+	  
+	  io.util.merge(deep, deeper);
+	  equal(deep.foo, 'bar');
+	  equal(deep.level1.foo, 'baz');
+	  equal(deep.level1.level2.foo, 'foo');
+	  equal(deep.level1.level2.level3.foo, 'pewpew');
 	});
 	
 	// Defer should take 100ms after the onload for webkit browsers.
