@@ -4,11 +4,11 @@
  * MIT Licensed
  */
 (function(){
-	module('io');
-	
-	// io should export a valid version number
-	test('version', function(){
-	  ok(!!io.version);
-	  ok(!!io.version.match(/([0-9]+)\.([0-9]+)\.([0-9]+)/));
-	});
+  module('io');
+  
+  // io should export a valid version number
+  test('version', function(){
+    ok(!!io.version);
+    ok(!!io.version.match(/([0-9]+)\.([0-9]+)\.([0-9]+)/));
+  });
 }())

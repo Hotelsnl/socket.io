@@ -1,10 +1,10 @@
 build:
-	node ./bin/builder.js
+	node ./bin/builder
 
 test:
 	expresso -I lib tests/*.test.js
 
 qunit:
-	open tests/index.html
+	node ./tests/qunit.server.js
 
 .PHONY: test build

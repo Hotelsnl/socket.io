@@ -155,20 +155,20 @@ var io = this.io = {
      * @api public
      */
     merge: function merge(target, additional, deep, lastseen){
-			var seen = lastseen || []
-				, depth = typeof deep == 'undefined' ? 2 : deep
-				, prop;
-			
-			for (prop in additional){
-				if (additional.hasOwnProperty(prop) && this.indexOf(seen, prop) < 0){
-					if (typeof target[prop] !== 'object' || !depth){
-						target[prop] = additional[prop];
-						seen.push(additional[prop]);
-					} else {
-						this.merge(target[prop], additional[prop], depth - 1, seen);
-					}
-				}
-			}
+      var seen = lastseen || []
+        , depth = typeof deep == 'undefined' ? 2 : deep
+        , prop;
+      
+      for (prop in additional){
+        if (additional.hasOwnProperty(prop) && this.indexOf(seen, prop) < 0){
+          if (typeof target[prop] !== 'object' || !depth){
+            target[prop] = additional[prop];
+            seen.push(additional[prop]);
+          } else {
+            this.merge(target[prop], additional[prop], depth - 1, seen);
+          }
+        }
+      }
       
       return target;
     }
@@ -675,7 +675,9 @@ var io = this.io = {
         }, this.options.connectTimeout);
       }
     }
-    if (fn && typeof fn == 'function') this.once('connect',fn);
+    if (fn && typeof fn == 'function'){
+      this.once('connect',fn);
+    }
     return this;
   };
   
@@ -801,8 +803,12 @@ var io = this.io = {
    */
   Socket.prototype.removeEvent = function(name, fn){
     if (name in this.events){
-      for (var a = 0, l = this.events[name].length; a < l; a++)
-        if (this.events[name][a] == fn || this.events[name][a].ref && this.events[name][a].ref == fn) this.events[name].splice(a, 1);    
+      for (var a = 0, l = this.events[name].length; a < l; a++){
+        console.log(this.events[name][a]);
+        if (this.events[name][a] && (this.events[name][a] == fn || this.events[name][a].ref && this.events[name][a].ref == fn)){
+          this.events[name].splice(a, 1);
+        }
+      }
     }
     return this;
   };
