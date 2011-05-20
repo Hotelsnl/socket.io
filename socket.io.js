@@ -1,4 +1,4 @@
-/** Socket.IO 0.6.2 - Built with build.js */
+/** Socket.IO 0.6.3 - Built with build.js */
 /**
  * socket.io-node-client
  * Copyright(c) 2011 LearnBoost <dev@learnboost.com>
@@ -13,7 +13,7 @@ var io = this.io = {
   /**
    * Library version.
    */
-  version: '0.6.2',
+  version: '0.6.3',
   
   /**
    * Updates the location of the WebSocketMain.swf file that is required for the Flashsocket transport.
