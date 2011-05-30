@@ -25,6 +25,16 @@ var template = '/*! Socket.IO.%ext% build:' + socket.io.version + ', %type%. Cop
   , production = template.replace('%type%', 'production').replace('%ext%', 'min.js');
 
 /**
+ * If statements, these allows you to create serveride & client side compatible code
+ * using specially designed `if` statements that remove serverside designed code from
+ * the source files
+ *
+ * @api private
+ */
+var starttagIF = '// if node'
+  , endtagIF = '// end node';
+
+/**
  * The modules that are required to create a base build of Socket.IO.
  *
  * @const
@@ -138,20 +148,39 @@ var builder = module.exports = function(){
       if (error) return callback(error);
       
       // concatinate the file contents in order
-      var code = development;
+      var code = development
+        , ignore = 0;
+      
       files.forEach(function(file){
         code += results[file];
       });
       
       // check if we need to add custom code
       if (settings.custom.length){
-        settigns.custom.forEach(function(content){
+        settings.custom.forEach(function(content){
           code += content;
         })
       }
       
       // update the socket.io code with a list of the available transports
       code = code.replace(/['"]@@AVAILABLE-TRANSPORTS@@['"]/g, JSON.stringify(transports));
+      
+      // Search for conditional code blocks that need to be removed as they where designed for
+      // a server side env.
+      code = code.split('\n').filter(function(line){
+        // check if there are tags in here
+        var start = line.indexOf(starttagIF) >= 0
+          , end = line.indexOf(endtagIF) >= 0
+          , ret = ignore;
+        
+        // ignore the current line
+        if (start) ignore++,ret = ignore;
+        
+        // stop ignoring the next line
+        if (end) ignore--;
+        
+        return ret == 0;
+      }).join('\n')
       
       // check if we need to process it any further
       if (settings.minify){

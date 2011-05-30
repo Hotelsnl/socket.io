@@ -73,6 +73,26 @@ module.exports = {
       transports[0].should.be.equal('websocket');
     });
   }
+, 'custom code': function(){
+    var custom = 'var hello = "world";';
+    builder({custom:[custom], minify:false}, function(error, result){
+      assert.ok(!error);
+      
+      result.indexOf(custom).should.be.above(-1);
+    });
+  }
+, 'node if': function(){
+    var custom = '// if node \nvar hello = "world";\n// end node\nvar pew = "pew";';
+    builder({custom:[custom], minify:false}, function(error, result){
+      assert.ok(!error);
+      
+      result.indexOf(custom).should.be.equal(-1);
+      result.indexOf('// if node').should.be.equal(-1);
+      result.indexOf('// end node').should.be.equal(-1);
+      result.indexOf('"world"').should.be.equal(-1);
+      result.indexOf('var pew = "pew"').should.be.above(-1);
+    });
+  }
 , 'globals': function(){
     builder(function(error, result){
       var io = common.execute(result)
